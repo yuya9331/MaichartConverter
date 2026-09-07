@@ -1,0 +1,635 @@
+<title>手牌討論台</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#EBEEEA; --panel:#F8FAF7; --ink:#141A16; --muted:#5C6862;
+    --line:#C6D0C8; --line-soft:#DCE3DC; --accent:#8F6414; --accent-soft:#F1E4C6;
+    --slip:#161D18; --slip-ink:#E9EEE9; --slip-muted:#8FA096;
+    --danger:#A8382C;
+    --card-bg:#F7F8F4; --card-line:#B9C2BA;
+    --s:#141A16; --h:#B4342A; --d:#1F6BB0; --c:#17743F;
+    --slip-s:#E9EEE9; --slip-h:#F0736A; --slip-d:#6BADEA; --slip-c:#4CBB7E;
+    --sans:"IBM Plex Sans","Noto Sans TC",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --cond:"IBM Plex Sans Condensed","IBM Plex Sans","Noto Sans TC",sans-serif;
+    --mono:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0E1310; --panel:#161C18; --ink:#E7EDE8; --muted:#93A199;
+      --line:#2C362F; --line-soft:#222B25; --accent:#DCA845; --accent-soft:#372B14;
+      --slip:#070A08; --slip-ink:#E7EDE8; --slip-muted:#7E8E85;
+      --danger:#E0796C;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0E1310; --panel:#161C18; --ink:#E7EDE8; --muted:#93A199;
+    --line:#2C362F; --line-soft:#222B25; --accent:#DCA845; --accent-soft:#372B14;
+    --slip:#070A08; --slip-ink:#E7EDE8; --slip-muted:#7E8E85;
+    --danger:#E0796C;
+  }
+
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  *{box-sizing:border-box}
+  button,input,select,textarea{font:inherit;color:inherit}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  .wrap{max-width:1200px;margin:0 auto;padding:22px 22px 72px}
+  .top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:14px;border-bottom:2px solid var(--ink);padding-bottom:12px}
+  .top h1{font-family:var(--cond);font-weight:600;font-size:27px;letter-spacing:.01em;margin:0;text-wrap:balance}
+  .top p{margin:4px 0 0;color:var(--muted);font-size:12.5px}
+  .top-actions{display:flex;gap:8px;align-items:center}
+
+  .btn{font-family:var(--cond);font-weight:500;font-size:12.5px;letter-spacing:.03em;padding:6px 12px;border:1px solid var(--line);background:var(--panel);border-radius:4px;cursor:pointer}
+  .btn:hover{border-color:var(--ink)}
+  .btn.primary{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+  .btn.ghost{background:none;border-color:transparent;color:var(--muted);padding:6px 8px}
+  .btn.ghost:hover{color:var(--ink);border-color:var(--line)}
+  .btn.tiny{font-size:11px;padding:3px 7px;border-radius:3px;font-family:var(--mono)}
+
+  .grid{display:grid;grid-template-columns:minmax(0,1fr) 352px;gap:34px;align-items:start;margin-top:18px}
+  @media (max-width:940px){.grid{grid-template-columns:1fr;gap:24px}}
+
+  .lbl{font-family:var(--cond);text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;font-weight:600;color:var(--muted)}
+
+  .setup{display:flex;flex-wrap:wrap;gap:16px 26px;padding:16px 0;border-bottom:1px solid var(--line)}
+  .f{display:flex;flex-direction:column;gap:6px}
+  .f select,.f input{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 8px;font-family:var(--mono);font-size:13px;min-width:0}
+  .f input[type=number]{width:82px}
+  .f input.blinds{width:92px}
+  .pos{display:flex;flex-wrap:wrap;gap:4px}
+  .posbtn{font-family:var(--mono);font-size:12px;padding:5px 9px;border:1px solid var(--line);background:var(--panel);border-radius:4px;cursor:pointer}
+  .posbtn[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink);font-weight:500}
+
+  .holerow{display:flex;align-items:center;gap:14px;padding:16px 0;border-bottom:1px solid var(--line)}
+  .cards{display:flex;gap:6px}
+
+  .card{width:40px;height:55px;border-radius:5px;background:var(--card-bg);border:1px solid var(--card-line);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;padding:0;line-height:1;box-shadow:0 1px 0 rgba(0,0,0,.06)}
+  .card .r{font-family:var(--cond);font-weight:600;font-size:19px}
+  .card .u{font-size:16px}
+  .card.s .r,.card.s .u{color:var(--s)} .card.h .r,.card.h .u{color:var(--h)}
+  .card.d .r,.card.d .u{color:var(--d)} .card.c .r,.card.c .u{color:var(--c)}
+  .card.empty{background:none;border:1px dashed var(--line);box-shadow:none;color:var(--muted);font-size:17px;font-family:var(--mono)}
+  .card.empty:hover{border-color:var(--accent);color:var(--accent)}
+
+  .street{display:grid;grid-template-columns:96px minmax(0,1fr);gap:18px;padding:16px 0;border-bottom:1px solid var(--line-soft)}
+  .street:last-of-type{border-bottom:none}
+  .st-name{font-family:var(--cond);font-weight:600;text-transform:uppercase;letter-spacing:.09em;font-size:13.5px}
+  .st-cn{font-size:11px;color:var(--muted);margin-top:1px}
+  .st-pot{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:7px;font-variant-numeric:tabular-nums;white-space:pre-line;line-height:1.6}
+  .st-body{min-width:0;display:flex;flex-direction:column;gap:9px}
+  .st-board{display:flex;align-items:center;gap:6px}
+  .acts{display:flex;flex-direction:column;gap:5px}
+  .act{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+  .act select{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:4px 6px;font-family:var(--mono);font-size:12.5px}
+  .act select.actor{width:106px} .act select.verb{width:112px}
+  .act input.size{width:68px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:4px 6px;font-family:var(--mono);font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums}
+  .unit{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:-3px}
+  .quick{display:flex;gap:3px}
+  .quick button{font-family:var(--mono);font-size:10.5px;padding:3px 5px;border:1px solid var(--line-soft);background:none;border-radius:3px;color:var(--muted);cursor:pointer}
+  .quick button:hover{border-color:var(--accent);color:var(--accent)}
+  .meta{font-family:var(--mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;margin-left:auto;padding-left:6px}
+  .del{border:none;background:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:2px 5px;border-radius:3px}
+  .del:hover{color:var(--danger);background:var(--accent-soft)}
+  .hint{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+
+  .side{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px}
+  @media (max-width:940px){.side{position:static}}
+  .panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:7px}
+  .slip{background:var(--slip);color:var(--slip-ink);border-radius:7px;padding:15px 16px;font-family:var(--mono);font-size:12.5px;line-height:1.8;white-space:pre-wrap;overflow-x:auto;max-height:52vh;overflow-y:auto}
+  .slip .cs{color:var(--slip-s)} .slip .ch{color:var(--slip-h)} .slip .cd{color:var(--slip-d)} .slip .cc{color:var(--slip-c)}
+  .slip .dim{color:var(--slip-muted)}
+  textarea#note{width:100%;min-height:70px;resize:vertical;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:9px 10px;font-family:var(--sans);font-size:13px}
+  .lib{border-top:1px solid var(--line);padding-top:12px}
+  .lib ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:2px;max-height:200px;overflow-y:auto}
+  .lib li{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line-soft)}
+  .lib .t{flex:1;min-width:0;font-family:var(--mono);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lib .when{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+
+  .modal{position:fixed;inset:0;background:rgba(10,14,11,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+  .modal[hidden]{display:none}
+  .picker{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:14px;max-width:100%;max-height:90vh;overflow:auto;box-shadow:0 18px 40px rgba(0,0,0,.28)}
+  .picker-head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:10px}
+  .picker-grid{display:grid;grid-template-columns:repeat(13,1fr);gap:4px;min-width:430px}
+  .pc{padding:6px 0;border:1px solid var(--card-line);border-radius:4px;background:var(--card-bg);font-family:var(--mono);font-size:12.5px;cursor:pointer;line-height:1.2}
+  .pc:disabled{opacity:.24;cursor:not-allowed}
+  .pc.s{color:var(--s)} .pc.h{color:var(--h)} .pc.d{color:var(--d)} .pc.c{color:var(--c)}
+  .chip{font-family:var(--mono);font-size:10.5px;padding:2px 7px;border-radius:99px;background:var(--accent-soft);color:var(--accent);border:1px solid transparent}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:26px;background:var(--ink);color:var(--panel);font-family:var(--mono);font-size:12px;padding:8px 14px;border-radius:5px;z-index:30}
+  .toast[hidden]{display:none}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>手牌討論台</h1>
+      <p>填好位置、手牌、公牌、行動與下注尺寸，右邊會產出可直接貼給 Claude 的標準手牌記錄。</p>
+    </div>
+    <div class="top-actions">
+      <span class="chip" id="exampleChip">範例牌局</span>
+      <button class="btn ghost" id="btnExample">載入範例</button>
+      <button class="btn ghost" id="btnClear">清空</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <main>
+      <section class="setup">
+        <div class="f"><span class="lbl">牌型 / 賽制</span>
+          <select id="game"><option value="cash">Cash 現金局</option><option value="mtt">MTT 錦標賽</option></select>
+        </div>
+        <div class="f"><span class="lbl">盲注</span><input class="blinds" id="blinds" value="$1/$2"></div>
+        <div class="f"><span class="lbl">桌型</span>
+          <select id="tableSize"><option value="9">9-max</option><option value="6">6-max</option><option value="2">HU 單挑</option></select>
+        </div>
+        <div class="f"><span class="lbl">有效籌碼 (bb)</span><input type="number" id="stack" min="1" step="1" value="100"></div>
+        <div class="f"><span class="lbl">大盲前注 (bb)</span><input type="number" id="ante" min="0" step="0.1" value="0"></div>
+        <div class="f" style="flex:1;min-width:240px"><span class="lbl">Hero 位置</span><div class="pos" id="posRow"></div></div>
+      </section>
+
+      <section class="holerow">
+        <span class="lbl" style="width:78px">Hero 手牌</span>
+        <div class="cards" id="holeCards"></div>
+        <span class="hint" id="holeHint"></span>
+      </section>
+
+      <section id="streets"></section>
+    </main>
+
+    <aside class="side">
+      <div>
+        <div class="panel-head"><span class="lbl">想問什麼</span></div>
+        <textarea id="note" placeholder="例：轉牌被 check-raise，該跟、加還是棄？"></textarea>
+      </div>
+      <div>
+        <div class="panel-head">
+          <span class="lbl">手牌記錄</span>
+          <button class="btn primary" id="btnCopy">複製</button>
+        </div>
+        <div class="slip" id="slip"></div>
+      </div>
+      <div class="lib" id="lib" hidden>
+        <div class="panel-head"><span class="lbl">存檔（Claude 可直接讀取）</span><button class="btn" id="btnSave">存這手</button></div>
+        <ul id="libList"></ul>
+        <p class="hint" id="libEmpty">還沒有存檔。</p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <div class="picker" role="dialog" aria-modal="true" aria-label="選牌">
+    <div class="picker-head"><span class="lbl" id="pickerTitle">選牌</span><button class="btn ghost" id="pickerClose">關閉 ✕</button></div>
+    <div class="picker-grid" id="pickerGrid"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+  var $=function(s){return document.querySelector(s);};
+  var RANKS=['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
+  var SUITS=['s','h','d','c'];
+  var SYM={s:'♠',h:'♥',d:'♦',c:'♣'};
+  var POS={2:['SB','BB'],6:['UTG','HJ','CO','BTN','SB','BB'],9:['UTG','UTG+1','UTG+2','LJ','HJ','CO','BTN','SB','BB']};
+  var STREETS=[
+    {k:'preflop',name:'PREFLOP',cn:'翻前',slot:-1,n:0},
+    {k:'flop',name:'FLOP',cn:'翻牌',slot:0,n:3},
+    {k:'turn',name:'TURN',cn:'轉牌',slot:3,n:1},
+    {k:'river',name:'RIVER',cn:'河牌',slot:4,n:1}
+  ];
+  var VERBS=[['fold','fold 棄牌'],['check','check 過牌'],['call','call 跟注'],['bet','bet 下注'],['raise','raise 加注'],['allin','all-in 全下']];
+  var KEY='phd.hand.v1';
+
+  var EXAMPLE={
+    game:'cash',blinds:'$1/$2',tableSize:6,stack:100,ante:0,heroPos:'BTN',
+    hole:['As','Kd'],board:['Kh','7c','2d','9s',null],
+    streets:{
+      preflop:[{actor:'BTN',act:'raise',size:'2.5'},{actor:'BB',act:'call',size:''}],
+      flop:[{actor:'BB',act:'check',size:''},{actor:'BTN',act:'bet',size:'2.5'},{actor:'BB',act:'call',size:''}],
+      turn:[{actor:'BB',act:'check',size:''},{actor:'BTN',act:'bet',size:'8'},{actor:'BB',act:'raise',size:'24'}],
+      river:[]
+    },
+    note:'轉牌被 check-raise，這裡該跟、再加還是棄牌？'
+  };
+
+  var state=clone(EXAMPLE), isExample=true, db=null, plain='';
+
+  function clone(o){return JSON.parse(JSON.stringify(o));}
+  function num(v){var n=parseFloat(v);return isFinite(n)?n:0;}
+  function fmt(n){return String(Math.round(n*100)/100);}
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function positions(){return POS[state.tableSize];}
+  function orderFor(k){
+    var p=positions();
+    if(k==='preflop') return p.slice();
+    if(state.tableSize===2) return ['BB','SB'];
+    return p.slice(-2).concat(p.slice(0,-2));
+  }
+  function usedCards(){
+    var u={};
+    state.hole.forEach(function(c){if(c)u[c]=1;});
+    state.board.forEach(function(c){if(c)u[c]=1;});
+    return u;
+  }
+  function cardStr(c){return c?c[0]+SYM[c[1]]:'';}
+  function raiseWord(n){
+    if(n===2) return 'raises to';
+    if(n>=3) return n+'-bets to';
+    return 'raises to';
+  }
+
+  /* ---- 底池 / 尺寸引擎 ---- */
+  function analyze(){
+    var carried=0, out={streets:{},order:[]}, preMax=0, potAtFlop=null;
+    STREETS.forEach(function(S){
+      var contrib={}, currentBet=0, raises=0;
+      if(S.k==='preflop'){
+        contrib['SB']=0.5; contrib['BB']=1; currentBet=1; raises=1;
+        carried+=Math.max(0,num(state.ante));
+      }
+      var sum=function(){var t=0;for(var k in contrib)t+=contrib[k];return t;};
+      var potStart=carried+sum();
+      var acts=(state.streets[S.k]||[]).map(function(a){
+        var potBefore=carried+sum(), betBefore=currentBet, cBefore=contrib[a.actor]||0;
+        var who=a.actor===state.heroPos?'Hero':a.actor, text='', meta='', added=0, to=0;
+        if(a.act==='fold'){ text=who+' folds'; }
+        else if(a.act==='check'){ text=who+' checks'; }
+        else if(a.act==='call'){
+          added=Math.max(0,currentBet-cBefore); contrib[a.actor]=cBefore+added;
+          text=who+' calls'+(added>0?' '+fmt(added):'');
+          if(added>0&&potBefore>0) meta=Math.round(added/potBefore*100)+'% pot';
+        } else {
+          to=Math.max(0,num(a.size)); added=Math.max(0,to-cBefore);
+          contrib[a.actor]=cBefore+added; if(to>currentBet) currentBet=to; raises++;
+          if(a.act==='allin') text=who+' jams '+fmt(to)+' (all-in)';
+          else if(raises===1) text=who+' bets '+fmt(to);
+          else text=who+' '+raiseWord(raises)+' '+fmt(to);
+          if(betBefore>0) meta=(Math.round(to/betBefore*10)/10)+'x';
+          else if(potBefore>0) meta=Math.round(added/potBefore*100)+'% pot';
+        }
+        return {text:text,meta:meta,potBefore:potBefore,betBefore:betBefore,cBefore:cBefore,potAfter:carried+sum()};
+      });
+      carried+=sum();
+      if(S.k==='preflop'){ for(var k in contrib) if(contrib[k]>preMax) preMax=contrib[k]; }
+      if(S.k==='flop') potAtFlop=potStart;
+      out.streets[S.k]={potStart:potStart,acts:acts,potEnd:carried};
+    });
+    var eff=Math.max(0,num(state.stack)-preMax);
+    out.spr=(potAtFlop&&potAtFlop>0)?Math.round(eff/potAtFlop*10)/10:null;
+    out.effLeft=eff;
+    return out;
+  }
+
+  /* ---- 記錄輸出 ---- */
+  function boardStr(S){
+    var cs=[];
+    for(var i=0;i<S.n;i++){var c=state.board[S.slot+i]; if(c)cs.push(cardStr(c));}
+    return cs.join(' ');
+  }
+  function boardReady(S){
+    if(S.k==='preflop') return true;
+    for(var i=0;i<S.n;i++) if(!state.board[S.slot+i]) return false;
+    return true;
+  }
+  function buildNotation(){
+    var info=analyze(), L=[];
+    var tbl=state.tableSize===2?'HU':(state.tableSize+'-max');
+    L.push('NLHE '+tbl+' '+state.blinds+(state.game==='mtt'?' MTT':'')+' · eff '+fmt(num(state.stack))+'bb'+(num(state.ante)>0?' · ante '+fmt(num(state.ante))+'bb':''));
+    var hole=state.hole.map(function(c){return c?cardStr(c):'??';}).join(' ');
+    L.push('Hero '+state.heroPos+' — '+hole);
+    STREETS.forEach(function(S){
+      var acts=info.streets[S.k].acts, bs=boardStr(S);
+      if(!acts.length&&!bs) return;
+      var head=S.name.charAt(0)+S.name.slice(1).toLowerCase();
+      var line=head+(bs?' '+bs:'')+' ('+fmt(info.streets[S.k].potStart)+'bb';
+      if(S.k==='flop'&&info.spr!=null) line+=', SPR '+info.spr;
+      line+='): ';
+      line+=acts.map(function(a){return a.text+(a.meta?' ['+a.meta+']':'');}).join(', ');
+      L.push(line);
+    });
+    var last=STREETS.slice().reverse().find(function(S){return (state.streets[S.k]||[]).length>0;});
+    if(last) L.push('Pot '+fmt(info.streets[last.k].potEnd)+'bb');
+    if(state.note&&state.note.trim()){ L.push(''); L.push('Q: '+state.note.trim()); }
+    return L.join('\n');
+  }
+  function colorize(t){
+    return esc(t).replace(/([2-9TJQKA])([♠♥♦♣])/g,function(m,r,s){
+      var cls=s==='♠'?'cs':s==='♥'?'ch':s==='♦'?'cd':'cc';
+      return '<span class="'+cls+'">'+r+s+'</span>';
+    }).replace(/(\[[^\]\n]*\])/g,'<span class="dim">$1</span>');
+  }
+
+  /* ---- 選牌 ---- */
+  var pickCtx=null;
+  function openPicker(kind,index,title){
+    pickCtx={kind:kind,index:index};
+    $('#pickerTitle').textContent=title;
+    renderPicker();
+    $('#modal').hidden=false;
+  }
+  function closePicker(){pickCtx=null;$('#modal').hidden=true;}
+  function renderPicker(){
+    var used=usedCards(), g=$('#pickerGrid'), html='';
+    SUITS.forEach(function(s){
+      RANKS.forEach(function(r){
+        var id=r+s, dis=used[id]?' disabled':'';
+        html+='<button class="pc '+s+'" data-card="'+id+'"'+dis+'>'+r+SYM[s]+'</button>';
+      });
+    });
+    g.innerHTML=html;
+  }
+  function setCard(id){
+    if(!pickCtx) return;
+    if(pickCtx.kind==='hole'){
+      state.hole[pickCtx.index]=id;
+      if(pickCtx.index===0&&!state.hole[1]){pickCtx.index=1;renderPicker();touch();return;}
+    }else{
+      state.board[pickCtx.index]=id;
+      var nextFlop=[0,1,2].filter(function(i){return !state.board[i];})[0];
+      if(pickCtx.index<3&&nextFlop!=null){pickCtx.index=nextFlop;renderPicker();touch();return;}
+    }
+    closePicker(); touch();
+  }
+
+  /* ---- 畫面 ---- */
+  function cardEl(card,onClick,label){
+    var b=document.createElement('button');
+    b.className='card'+(card?' '+card[1]:' empty');
+    b.type='button';
+    b.setAttribute('aria-label',label);
+    if(card) b.innerHTML='<span class="r">'+card[0]+'</span><span class="u">'+SYM[card[1]]+'</span>';
+    else b.textContent='+';
+    b.addEventListener('click',onClick);
+    return b;
+  }
+
+  function renderSetup(){
+    $('#game').value=state.game;
+    $('#blinds').value=state.blinds;
+    $('#tableSize').value=String(state.tableSize);
+    $('#stack').value=state.stack;
+    $('#ante').value=state.ante;
+    $('#note').value=state.note||'';
+    var row=$('#posRow'); row.innerHTML='';
+    positions().forEach(function(p){
+      var b=document.createElement('button');
+      b.type='button'; b.className='posbtn'; b.textContent=p;
+      b.setAttribute('aria-pressed',String(p===state.heroPos));
+      b.addEventListener('click',function(){state.heroPos=p;touch();});
+      row.appendChild(b);
+    });
+  }
+
+  function renderHole(){
+    var box=$('#holeCards'); box.innerHTML='';
+    [0,1].forEach(function(i){
+      box.appendChild(cardEl(state.hole[i],function(){openPicker('hole',i,'選 Hero 手牌');},'手牌 '+(i+1)));
+    });
+    var missing=state.hole.filter(function(c){return !c;}).length;
+    $('#holeHint').textContent=missing?'點卡片選牌':'';
+  }
+
+  function renderStreets(){
+    var host=$('#streets'); host.innerHTML='';
+    STREETS.forEach(function(S){
+      var sec=document.createElement('section'); sec.className='street'; sec.dataset.street=S.k;
+      var gut=document.createElement('div');
+      gut.innerHTML='<div class="st-name">'+S.name+'</div><div class="st-cn">'+S.cn+'</div><div class="st-pot" data-pot></div>';
+      sec.appendChild(gut);
+
+      var body=document.createElement('div'); body.className='st-body';
+      if(S.n>0){
+        var brd=document.createElement('div'); brd.className='st-board';
+        for(var i=0;i<S.n;i++){
+          (function(idx){
+            brd.appendChild(cardEl(state.board[idx],function(){openPicker('board',idx,'選'+S.cn);},S.cn+' '+(idx+1)));
+          })(S.slot+i);
+        }
+        body.appendChild(brd);
+      }
+
+      var list=document.createElement('div'); list.className='acts';
+      (state.streets[S.k]||[]).forEach(function(a,ai){ list.appendChild(actRow(S,a,ai)); });
+      body.appendChild(list);
+
+      var foot=document.createElement('div');
+      if(boardReady(S)){
+        var add=document.createElement('button');
+        add.className='btn tiny'; add.type='button'; add.textContent='+ 行動';
+        add.addEventListener('click',function(){
+          var rows=state.streets[S.k], ord=orderFor(S.k), next=ord[0];
+          if(rows.length){
+            var li=ord.indexOf(rows[rows.length-1].actor);
+            next=ord[(li+1)%ord.length];
+          }
+          rows.push({actor:next,act:rows.length?'call':(S.k==='preflop'?'raise':'check'),size:''});
+          touch();
+        });
+        foot.appendChild(add);
+      }else{
+        foot.innerHTML='<span class="hint">先補齊'+S.cn+'公牌</span>';
+      }
+      body.appendChild(foot);
+      sec.appendChild(body);
+      host.appendChild(sec);
+    });
+  }
+
+  function actRow(S,a,ai){
+    var row=document.createElement('div'); row.className='act'; row.dataset.i=ai;
+
+    var actor=document.createElement('select'); actor.className='actor';
+    orderFor(S.k).forEach(function(p){
+      var o=document.createElement('option'); o.value=p;
+      o.textContent=p+(p===state.heroPos?' · Hero':'');
+      actor.appendChild(o);
+    });
+    actor.value=a.actor;
+    actor.addEventListener('change',function(){a.actor=actor.value;touch();});
+    row.appendChild(actor);
+
+    var verb=document.createElement('select'); verb.className='verb';
+    VERBS.forEach(function(v){
+      var o=document.createElement('option'); o.value=v[0]; o.textContent=v[1]; verb.appendChild(o);
+    });
+    verb.value=a.act;
+    verb.addEventListener('change',function(){a.act=verb.value;touch();});
+    row.appendChild(verb);
+
+    if(a.act==='bet'||a.act==='raise'||a.act==='allin'){
+      var size=document.createElement('input');
+      size.className='size'; size.type='number'; size.step='0.1'; size.min='0';
+      size.value=a.size; size.placeholder='0';
+      size.setAttribute('aria-label','下注尺寸 bb');
+      size.addEventListener('input',function(){a.size=size.value;renderDerived();persist();});
+      row.appendChild(size);
+      var u=document.createElement('span'); u.className='unit'; u.textContent='bb'; row.appendChild(u);
+
+      var q=document.createElement('div'); q.className='quick';
+      var opts=(a.act==='raise')?[['2.2x',2.2],['2.5x',2.5],['3x',3],['4x',4]]:[['33%',.33],['50%',.5],['75%',.75],['1x pot',1]];
+      opts.forEach(function(o){
+        var b=document.createElement('button'); b.type='button'; b.textContent=o[0];
+        b.addEventListener('click',function(){
+          var info=analyze().streets[S.k].acts[ai];
+          if(!info) return;
+          var to;
+          if(a.act==='raise'&&info.betBefore>0) to=info.betBefore*o[1];
+          else to=info.cBefore+info.potBefore*o[1];
+          a.size=String(Math.round(to*10)/10);
+          size.value=a.size; renderDerived(); persist();
+        });
+        q.appendChild(b);
+      });
+      row.appendChild(q);
+    }
+
+    var meta=document.createElement('span'); meta.className='meta'; meta.dataset.meta='1'; row.appendChild(meta);
+
+    var del=document.createElement('button');
+    del.className='del'; del.type='button'; del.title='刪除這個行動'; del.setAttribute('aria-label','刪除這個行動');
+    del.textContent='×';
+    del.addEventListener('click',function(){state.streets[S.k].splice(ai,1);touch();});
+    row.appendChild(del);
+    return row;
+  }
+
+  function renderDerived(){
+    var info=analyze();
+    STREETS.forEach(function(S){
+      var sec=document.querySelector('.street[data-street="'+S.k+'"]');
+      if(!sec) return;
+      var d=info.streets[S.k];
+      var potEl=sec.querySelector('[data-pot]');
+      var txt='池 '+fmt(d.potStart)+'bb';
+      if(S.k==='flop'&&info.spr!=null) txt+='\nSPR '+info.spr;
+      potEl.textContent=txt;
+      var rows=sec.querySelectorAll('.act');
+      for(var i=0;i<rows.length;i++){
+        var a=d.acts[i], m=rows[i].querySelector('[data-meta]');
+        if(!a||!m) continue;
+        m.textContent=(a.meta?a.meta+' · ':'')+'池 '+fmt(a.potAfter)+'bb';
+      }
+    });
+    plain=buildNotation();
+    $('#slip').innerHTML=colorize(plain);
+  }
+
+  function persist(){
+    try{ localStorage.setItem(KEY,JSON.stringify({state:state,isExample:isExample})); }catch(e){}
+  }
+  function touch(){
+    if(isExample){isExample=false;$('#exampleChip').hidden=true;}
+    renderAll(); persist();
+  }
+  function renderAll(){
+    $('#exampleChip').hidden=!isExample;
+    renderSetup(); renderHole(); renderStreets(); renderDerived();
+  }
+
+  function toast(msg){
+    var t=$('#toast'); t.textContent=msg; t.hidden=false;
+    clearTimeout(t._t); t._t=setTimeout(function(){t.hidden=true;},1800);
+  }
+
+  function emptyState(){
+    return {game:state.game,blinds:state.blinds,tableSize:state.tableSize,stack:state.stack,ante:state.ante,
+      heroPos:state.heroPos,hole:[null,null],board:[null,null,null,null,null],
+      streets:{preflop:[],flop:[],turn:[],river:[]},note:''};
+  }
+
+  /* ---- 事件 ---- */
+  $('#game').addEventListener('change',function(){state.game=this.value;touch();});
+  $('#blinds').addEventListener('input',function(){state.blinds=this.value;renderDerived();persist();});
+  $('#stack').addEventListener('input',function(){state.stack=this.value;renderDerived();persist();});
+  $('#ante').addEventListener('input',function(){state.ante=this.value;renderDerived();persist();});
+  $('#note').addEventListener('input',function(){state.note=this.value;renderDerived();persist();});
+  $('#tableSize').addEventListener('change',function(){
+    state.tableSize=parseInt(this.value,10);
+    var ps=positions();
+    if(ps.indexOf(state.heroPos)<0) state.heroPos=ps[ps.length-3]||ps[0];
+    ['preflop','flop','turn','river'].forEach(function(k){
+      state.streets[k]=state.streets[k].filter(function(a){return ps.indexOf(a.actor)>=0;});
+    });
+    touch();
+  });
+  $('#btnExample').addEventListener('click',function(){state=clone(EXAMPLE);isExample=true;renderAll();persist();});
+  $('#btnClear').addEventListener('click',function(){state=emptyState();isExample=false;renderAll();persist();});
+  $('#pickerClose').addEventListener('click',closePicker);
+  $('#modal').addEventListener('click',function(e){if(e.target===this)closePicker();});
+  $('#pickerGrid').addEventListener('click',function(e){
+    var b=e.target.closest('.pc'); if(b&&!b.disabled) setCard(b.dataset.card);
+  });
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!$('#modal').hidden)closePicker();});
+  $('#btnCopy').addEventListener('click',function(){
+    var txt=plain;
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(function(){toast('已複製，貼給 Claude 就行');},fallback);
+    } else fallback();
+    function fallback(){
+      var ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select();
+      try{document.execCommand('copy');toast('已複製，貼給 Claude 就行');}catch(e){toast('複製失敗，請手動選取');}
+      document.body.removeChild(ta);
+    }
+  });
+
+  /* ---- 存檔（db） ---- */
+  function libTitle(){
+    var hole=state.hole.map(function(c){return c?cardStr(c):'??';}).join('');
+    var bs=state.board.filter(Boolean).map(cardStr).join('');
+    return state.heroPos+' '+hole+(bs?' / '+bs:'');
+  }
+  function renderLib(docs){
+    var ul=$('#libList'); ul.innerHTML='';
+    $('#libEmpty').hidden=docs.length>0;
+    docs.forEach(function(d){
+      var data=d.data()||{};
+      var li=document.createElement('li');
+      var t=document.createElement('span'); t.className='t'; t.textContent=data.title||d.id;
+      var when=document.createElement('span'); when.className='when';
+      when.textContent=(data.savedAt||'').slice(5,10);
+      var load=document.createElement('button'); load.className='btn tiny'; load.textContent='載入';
+      load.addEventListener('click',function(){
+        try{ state=JSON.parse(data.hand); isExample=false; renderAll(); persist(); toast('已載入 '+(data.title||'')); }
+        catch(e){ toast('讀取失敗'); }
+      });
+      var del=document.createElement('button'); del.className='del'; del.textContent='×'; del.title='刪除存檔';
+      del.addEventListener('click',function(){
+        db.collection('hands').doc(d.id).delete().then(loadLib).catch(function(){toast('刪除失敗');});
+      });
+      li.appendChild(t); li.appendChild(when); li.appendChild(load); li.appendChild(del);
+      ul.appendChild(li);
+    });
+  }
+  function loadLib(){
+    db.collection('hands').orderBy('savedAt','desc').limit(30).get()
+      .then(function(snap){renderLib(snap.docs);})
+      .catch(function(){});
+  }
+  $('#btnSave').addEventListener('click',function(){
+    if(!db) return;
+    var id='h_'+Date.now().toString(36);
+    db.collection('hands').doc(id).set({
+      title:libTitle(), savedAt:new Date().toISOString(),
+      notation:plain, hand:JSON.stringify(state)
+    }).then(function(){toast('已存檔，可以叫 Claude 讀取');loadLib();})
+      .catch(function(){toast('存檔失敗');});
+  });
+
+  /* ---- 啟動 ---- */
+  try{
+    var saved=JSON.parse(localStorage.getItem(KEY)||'null');
+    if(saved&&saved.state){state=saved.state;isExample=!!saved.isExample;}
+  }catch(e){}
+  ['preflop','flop','turn','river'].forEach(function(k){ if(!state.streets[k]) state.streets[k]=[]; });
+  renderAll();
+
+  if(window.claude&&window.claude.use){
+    window.claude.use('db').then(function(d){
+      if(!d) return;
+      db=d; $('#lib').hidden=false; loadLib();
+    }).catch(function(){});
+  }
+})();
+</script>
