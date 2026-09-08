@@ -244,7 +244,7 @@
   /* ---- 底池 / 尺寸引擎 ---- */
   function analyze(){
     var carried=0, out={streets:{}}, preMax=0, potAtFlop=null, ended=false;
-    var live=positions().slice();
+    var live=positions().slice(), paid={}, allIn={};
     STREETS.forEach(function(S){
       var liveStart=live.slice();
       var contrib={}, currentBet=0, raises=0, folded={}, lastAct={};
@@ -257,10 +257,15 @@
       var rows=state.streets[S.k]||[];
       var acts=rows.map(function(a){
         var potBefore=carried+sum(), betBefore=currentBet, cBefore=contrib[a.actor]||0;
-        var foldedBefore={}; for(var f in folded) foldedBefore[f]=1;
-        if(liveStart.indexOf(a.actor)<0||folded[a.actor]){
-          return {text:'',meta:'',invalid:true,foldedBefore:foldedBefore,potBefore:potBefore,
-                  betBefore:betBefore,cBefore:cBefore,potAfter:potBefore};
+        /* 這一行動作之前，誰已經沒有行動權：棄牌的人，加上已經全下的人 */
+        var outBefore={}; for(var f in folded) outBefore[f]=1;
+        for(var g0 in allIn) outBefore[g0]=1;
+        /* 全下的「加到」金額 = 有效籌碼扣掉前面幾條街已經投入的錢 */
+        var allInTo=Math.max(0,num(state.stack)-(paid[a.actor]||0));
+        if(liveStart.indexOf(a.actor)<0||outBefore[a.actor]){
+          return {text:'',meta:'',invalid:true,reason:(allIn[a.actor]&&!folded[a.actor])?'已全下':'已棄牌',
+                  outBefore:outBefore,potBefore:potBefore,
+                  betBefore:betBefore,cBefore:cBefore,allInTo:allInTo,potAfter:potBefore};
         }
         var who=a.actor===state.heroPos?'Hero':a.actor, text='', meta='', added=0, to=0;
         if(a.act==='fold'){ text=who+' folds'; }
@@ -280,17 +285,20 @@
         }
         lastAct[a.actor]=a.act;
         if(a.act==='fold') folded[a.actor]=1;
-        return {text:text,meta:meta,foldedBefore:foldedBefore,potBefore:potBefore,
-                betBefore:betBefore,cBefore:cBefore,potAfter:carried+sum()};
+        if(a.act==='allin') allIn[a.actor]=1;
+        return {text:text,meta:meta,outBefore:outBefore,potBefore:potBefore,
+                betBefore:betBefore,cBefore:cBefore,allInTo:allInTo,potAfter:carried+sum()};
       });
       carried+=sum();
+      for(var pk in contrib) paid[pk]=(paid[pk]||0)+contrib[pk];
       if(S.k==='preflop'){ for(var k in contrib) if(contrib[k]>preMax) preMax=contrib[k]; }
       if(S.k==='flop') potAtFlop=potStart;
       var afterFolds=liveStart.filter(function(p){return !folded[p];});
       if(liveStart.length>1&&afterFolds.length<=1) ended=true;
+      var jammed=liveStart.filter(function(p){return allIn[p];}).length>0;
       out.streets[S.k]={
-        potStart:potStart, acts:acts, potEnd:carried, liveStart:liveStart, ended:ended,
-        avail:orderFor(S.k).filter(function(p){return liveStart.indexOf(p)>=0&&!folded[p];})
+        potStart:potStart, acts:acts, potEnd:carried, liveStart:liveStart, ended:ended, jammed:jammed,
+        avail:orderFor(S.k).filter(function(p){return liveStart.indexOf(p)>=0&&!folded[p]&&!allIn[p];})
       };
       /* 進入下一條街的人：沒棄牌，而且把注跟平了（全下的人也算在內）。
          這條街完全沒填行動就不推論，維持原本的人。 */
@@ -446,9 +454,11 @@
       if(!boardReady(S)){
         foot.innerHTML='<span class="hint">先補齊'+S.cn+'公牌</span>';
       }else if(avail.length<=1){
-        foot.innerHTML='<span class="hint">'+(info.streets[S.k].ended
-          ? '手牌已結束（只剩 '+(avail[0]||'—')+'）'
-          : '只剩 '+(avail[0]||'—')+' 在牌局中——上一條街若還沒填完，補上跟注就會恢復')+'</span>';
+        var st=info.streets[S.k], msg;
+        if(st.ended) msg='手牌已結束（只剩 '+(avail[0]||'—')+'）';
+        else if(st.jammed) msg='已有玩家全下，之後不需要再行動';
+        else msg='只剩 '+(avail[0]||'—')+' 在牌局中——上一條街若還沒填完，補上跟注就會恢復';
+        foot.innerHTML='<span class="hint">'+msg+'</span>';
       }else{
         var add=document.createElement('button');
         add.className='btn tiny'; add.type='button'; add.textContent='+ 行動';
@@ -474,7 +484,7 @@
     var row=document.createElement('div'); row.className='act'; row.dataset.i=ai;
 
     var d=info.streets[S.k];
-    var fb=(d.acts[ai]&&d.acts[ai].foldedBefore)||{};
+    var fb=(d.acts[ai]&&d.acts[ai].outBefore)||{};
     var opts=orderFor(S.k).filter(function(p){return d.liveStart.indexOf(p)>=0&&!fb[p];});
     if(opts.indexOf(a.actor)<0) opts.push(a.actor);
 
@@ -493,7 +503,14 @@
       var o=document.createElement('option'); o.value=v[0]; o.textContent=v[1]; verb.appendChild(o);
     });
     verb.value=a.act;
-    verb.addEventListener('change',function(){a.act=verb.value;touch();});
+    verb.addEventListener('change',function(){
+      a.act=verb.value;
+      if(a.act==='allin'){
+        var cur=analyze().streets[S.k].acts[ai];
+        if(cur) a.size=fmt(cur.allInTo);
+      }
+      touch();
+    });
     row.appendChild(verb);
 
     if(a.act==='bet'||a.act==='raise'||a.act==='allin'){
@@ -506,7 +523,17 @@
       var u=document.createElement('span'); u.className='unit'; u.textContent='bb'; row.appendChild(u);
 
       var q=document.createElement('div'); q.className='quick';
-      var opts=(a.act==='raise')?[['2.2x',2.2],['2.5x',2.5],['3x',3],['4x',4]]:[['33%',.33],['50%',.5],['75%',.75],['1x pot',1]];
+      if(a.act==='allin'){
+        var stk=document.createElement('button'); stk.type='button';
+        stk.textContent='後手 '+fmt((d.acts[ai]&&d.acts[ai].allInTo)||0);
+        stk.title='帶入這位玩家剩下的籌碼';
+        stk.addEventListener('click',function(){
+          var cur=analyze().streets[S.k].acts[ai]; if(!cur) return;
+          a.size=fmt(cur.allInTo); size.value=a.size; renderDerived(); persist();
+        });
+        q.appendChild(stk);
+      }
+      var opts=(a.act==='allin')?[]:(a.act==='raise')?[['2.2x',2.2],['2.5x',2.5],['3x',3],['4x',4]]:[['33%',.33],['50%',.5],['75%',.75],['1x pot',1]];
       opts.forEach(function(o){
         var b=document.createElement('button'); b.type='button'; b.textContent=o[0];
         b.addEventListener('click',function(){
@@ -547,8 +574,13 @@
       for(var i=0;i<rows.length;i++){
         var a=d.acts[i], m=rows[i].querySelector('[data-meta]');
         if(!a||!m) continue;
-        if(a.invalid){ m.textContent='⚠ 已不在牌局，這行不計入'; m.classList.add('warn'); }
-        else { m.textContent=(a.meta?a.meta+' · ':'')+'池 '+fmt(a.potAfter)+'bb'; m.classList.remove('warn'); }
+        if(a.invalid){ m.textContent='⚠ '+(a.reason||'已不在牌局')+'，這行不計入'; m.classList.add('warn'); }
+        else {
+          var row=(state.streets[S.k]||[])[i];
+          var tail=(row&&row.act==='allin')?' · 後手 '+fmt(a.allInTo):'';
+          m.textContent=(a.meta?a.meta+' · ':'')+'池 '+fmt(a.potAfter)+'bb'+tail;
+          m.classList.remove('warn');
+        }
       }
     });
     plain=buildNotation();
