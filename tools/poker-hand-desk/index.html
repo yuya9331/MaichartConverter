@@ -93,6 +93,12 @@
   .del:hover{color:var(--danger);background:var(--accent-soft)}
   .hint{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
   .meta.warn{color:var(--danger)}
+  .sd-sec{border-top:1px solid var(--line)}
+  .sd-row{display:flex;flex-wrap:wrap;align-items:center;gap:9px}
+  .sd-who{font-family:var(--mono);font-size:12.5px;min-width:64px}
+  .sd-note{width:150px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 7px;font-family:var(--sans);font-size:12.5px}
+  .muck{font-family:var(--mono);font-size:11px;padding:4px 8px;border:1px solid var(--line);background:var(--panel);border-radius:4px;cursor:pointer}
+  .muck[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
 
   .side{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px}
   @media (max-width:940px){.side{position:static}}
@@ -155,6 +161,7 @@
       </section>
 
       <section id="streets"></section>
+      <section id="showdown"></section>
     </main>
 
     <aside class="side">
@@ -212,6 +219,7 @@
       turn:[{actor:'BB',act:'check',size:''},{actor:'BTN',act:'bet',size:'8'},{actor:'BB',act:'raise',size:'24'}],
       river:[]
     },
+    showdown:{},
     note:'轉牌被 check-raise，這裡該跟、再加還是棄牌？'
   };
 
@@ -232,6 +240,9 @@
     var u={};
     state.hole.forEach(function(c){if(c)u[c]=1;});
     state.board.forEach(function(c){if(c)u[c]=1;});
+    for(var p in (state.showdown||{})){
+      ((state.showdown[p]||{}).cards||[]).forEach(function(c){if(c)u[c]=1;});
+    }
     return u;
   }
   function cardStr(c){return c?c[0]+SYM[c[1]]:'';}
@@ -310,10 +321,96 @@
         });
       } else live=liveStart.slice();
     });
+    out.finalLive=live.slice();
     var eff=Math.max(0,num(state.stack)-preMax);
     out.spr=(potAtFlop&&potAtFlop>0)?Math.round(eff/potAtFlop*10)/10:null;
     out.effLeft=eff;
     return out;
+  }
+
+  /* ---- 攤牌 ---- */
+  /* 什麼時候會有攤牌：河牌有人跟注、任一條街有人全下又被跟、或河牌 check 到底。
+     被打棄的手牌不需要填牌。 */
+  function showdownInfo(info){
+    var trig=false, why='', lastFold=null;
+    STREETS.forEach(function(S){
+      var acts=info.streets[S.k].acts, seenAllIn=false;
+      (state.streets[S.k]||[]).forEach(function(a,i){
+        if(acts[i]&&acts[i].invalid) return;
+        if(a.act==='fold'){ lastFold=a.actor; return; }
+        if(a.act==='allin'){
+          if(seenAllIn){ trig=true; why='全下被跟'; }
+          seenAllIn=true; return;
+        }
+        if(a.act==='call'&&seenAllIn){ trig=true; why='全下被跟'; }
+        if(S.k==='river'&&a.act==='call'){ trig=true; why='河牌跟注'; }
+      });
+    });
+    var rr=state.streets.river||[];
+    if(!trig&&rr.length){
+      var bet=rr.some(function(a){return a.act==='bet'||a.act==='raise'||a.act==='allin';});
+      if(!bet){
+        var checkers={};
+        rr.forEach(function(a){ if(a.act==='check') checkers[a.actor]=1; });
+        if(info.streets.river.liveStart.every(function(p){return checkers[p];})){ trig=true; why='河牌 check 到底'; }
+      }
+    }
+    var players=info.finalLive||[];
+    return {reached:trig&&players.length>=2, players:players, why:why, lastFold:lastFold};
+  }
+
+  function sdEntry(p){
+    if(!state.showdown) state.showdown={};
+    if(!state.showdown[p]) state.showdown[p]={cards:[null,null],note:'',muck:false};
+    if(!state.showdown[p].cards) state.showdown[p].cards=[null,null];
+    return state.showdown[p];
+  }
+
+  function renderShowdown(){
+    var host=$('#showdown'); host.innerHTML='';
+    var info=analyze(), sd=showdownInfo(info);
+    if(!sd.reached) return;
+    var sec=document.createElement('section'); sec.className='street sd-sec';
+    var gut=document.createElement('div');
+    gut.innerHTML='<div class="st-name">SHOWDOWN</div><div class="st-cn">攤牌</div>'+
+                  '<div class="st-pot">'+esc(sd.why)+'</div>';
+    sec.appendChild(gut);
+    var body=document.createElement('div'); body.className='st-body';
+    sd.players.forEach(function(p){
+      var e=sdEntry(p), isHero=(p===state.heroPos);
+      var row=document.createElement('div'); row.className='sd-row';
+      var who=document.createElement('span'); who.className='sd-who';
+      who.textContent=p+(isHero?' · Hero':''); row.appendChild(who);
+
+      var cards=document.createElement('div'); cards.className='cards';
+      if(isHero){
+        [0,1].forEach(function(i){
+          cards.appendChild(cardEl(state.hole[i],function(){openPicker('hole',i,'選 Hero 手牌');},'Hero 手牌 '+(i+1)));
+        });
+      }else{
+        [0,1].forEach(function(i){
+          cards.appendChild(cardEl(e.cards[i],function(){openPicker('sd',i,'選 '+p+' 的手牌',p);},p+' 手牌 '+(i+1)));
+        });
+      }
+      row.appendChild(cards);
+
+      var note=document.createElement('input'); note.className='sd-note';
+      note.placeholder='牌型／結果（選填）'; note.value=e.note||'';
+      note.setAttribute('aria-label',p+' 牌型');
+      note.addEventListener('input',function(){e.note=note.value;renderDerived();persist();});
+      row.appendChild(note);
+
+      var muck=document.createElement('button');
+      muck.type='button'; muck.className='muck'; muck.textContent='蓋牌 muck';
+      muck.setAttribute('aria-pressed',String(!!e.muck));
+      muck.addEventListener('click',function(){e.muck=!e.muck;touch();});
+      row.appendChild(muck);
+
+      if(e.muck){ cards.style.opacity='.35'; note.disabled=true; }
+      body.appendChild(row);
+    });
+    sec.appendChild(body);
+    host.appendChild(sec);
   }
 
   /* ---- 記錄輸出 ---- */
@@ -345,6 +442,17 @@
     });
     var last=STREETS.slice().reverse().find(function(S){return (state.streets[S.k]||[]).length>0;});
     if(last) L.push('Pot '+fmt(info.streets[last.k].potEnd)+'bb');
+    var sd=showdownInfo(info);
+    if(sd.reached){
+      L.push('Showdown: '+sd.players.map(function(p){
+        var e=(state.showdown||{})[p]||{}, who=p===state.heroPos?'Hero':p;
+        if(e.muck) return who+' mucks';
+        var cs=(p===state.heroPos?state.hole:(e.cards||[])).filter(Boolean).map(cardStr).join('');
+        return who+' shows '+(cs||'??')+(e.note?' ('+e.note+')':'');
+      }).join(' / '));
+    }else if(sd.lastFold){
+      L.push('Showdown: none ('+(sd.lastFold===state.heroPos?'Hero':sd.lastFold)+' folds)');
+    }
     if(state.note&&state.note.trim()){ L.push(''); L.push('Q: '+state.note.trim()); }
     return L.join('\n');
   }
@@ -357,8 +465,8 @@
 
   /* ---- 選牌 ---- */
   var pickCtx=null;
-  function openPicker(kind,index,title){
-    pickCtx={kind:kind,index:index};
+  function openPicker(kind,index,title,pos){
+    pickCtx={kind:kind,index:index,pos:pos};
     $('#pickerTitle').textContent=title;
     renderPicker();
     $('#modal').hidden=false;
@@ -376,7 +484,11 @@
   }
   function setCard(id){
     if(!pickCtx) return;
-    if(pickCtx.kind==='hole'){
+    if(pickCtx.kind==='sd'){
+      var e=sdEntry(pickCtx.pos);
+      e.cards[pickCtx.index]=id;
+      if(pickCtx.index===0&&!e.cards[1]){pickCtx.index=1;renderPicker();touch();return;}
+    }else if(pickCtx.kind==='hole'){
       state.hole[pickCtx.index]=id;
       if(pickCtx.index===0&&!state.hole[1]){pickCtx.index=1;renderPicker();touch();return;}
     }else{
@@ -596,7 +708,7 @@
   }
   function renderAll(){
     $('#exampleChip').hidden=!isExample;
-    renderSetup(); renderHole(); renderStreets(); renderDerived();
+    renderSetup(); renderHole(); renderStreets(); renderShowdown(); renderDerived();
   }
 
   function toast(msg){
@@ -607,7 +719,7 @@
   function emptyState(){
     return {game:state.game,blinds:state.blinds,tableSize:state.tableSize,stack:state.stack,ante:state.ante,
       heroPos:state.heroPos,hole:[null,null],board:[null,null,null,null,null],
-      streets:{preflop:[],flop:[],turn:[],river:[]},note:''};
+      streets:{preflop:[],flop:[],turn:[],river:[]},showdown:{},note:''};
   }
 
   /* ---- 事件 ---- */
@@ -694,6 +806,7 @@
     if(saved&&saved.state){state=saved.state;isExample=!!saved.isExample;}
   }catch(e){}
   ['preflop','flop','turn','river'].forEach(function(k){ if(!state.streets[k]) state.streets[k]=[]; });
+  if(!state.showdown) state.showdown={};
   renderAll();
 
   if(window.claude&&window.claude.use){
