@@ -92,6 +92,7 @@
   .del{border:none;background:none;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:2px 5px;border-radius:3px}
   .del:hover{color:var(--danger);background:var(--accent-soft)}
   .hint{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .meta.warn{color:var(--danger)}
 
   .side{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px}
   @media (max-width:940px){.side{position:static}}
@@ -242,17 +243,25 @@
 
   /* ---- 底池 / 尺寸引擎 ---- */
   function analyze(){
-    var carried=0, out={streets:{},order:[]}, preMax=0, potAtFlop=null;
+    var carried=0, out={streets:{}}, preMax=0, potAtFlop=null, ended=false;
+    var live=positions().slice();
     STREETS.forEach(function(S){
-      var contrib={}, currentBet=0, raises=0;
+      var liveStart=live.slice();
+      var contrib={}, currentBet=0, raises=0, folded={}, lastAct={};
       if(S.k==='preflop'){
         contrib['SB']=0.5; contrib['BB']=1; currentBet=1; raises=1;
         carried+=Math.max(0,num(state.ante));
       }
       var sum=function(){var t=0;for(var k in contrib)t+=contrib[k];return t;};
       var potStart=carried+sum();
-      var acts=(state.streets[S.k]||[]).map(function(a){
+      var rows=state.streets[S.k]||[];
+      var acts=rows.map(function(a){
         var potBefore=carried+sum(), betBefore=currentBet, cBefore=contrib[a.actor]||0;
+        var foldedBefore={}; for(var f in folded) foldedBefore[f]=1;
+        if(liveStart.indexOf(a.actor)<0||folded[a.actor]){
+          return {text:'',meta:'',invalid:true,foldedBefore:foldedBefore,potBefore:potBefore,
+                  betBefore:betBefore,cBefore:cBefore,potAfter:potBefore};
+        }
         var who=a.actor===state.heroPos?'Hero':a.actor, text='', meta='', added=0, to=0;
         if(a.act==='fold'){ text=who+' folds'; }
         else if(a.act==='check'){ text=who+' checks'; }
@@ -269,12 +278,29 @@
           if(betBefore>0) meta=(Math.round(to/betBefore*10)/10)+'x';
           else if(potBefore>0) meta=Math.round(added/potBefore*100)+'% pot';
         }
-        return {text:text,meta:meta,potBefore:potBefore,betBefore:betBefore,cBefore:cBefore,potAfter:carried+sum()};
+        lastAct[a.actor]=a.act;
+        if(a.act==='fold') folded[a.actor]=1;
+        return {text:text,meta:meta,foldedBefore:foldedBefore,potBefore:potBefore,
+                betBefore:betBefore,cBefore:cBefore,potAfter:carried+sum()};
       });
       carried+=sum();
       if(S.k==='preflop'){ for(var k in contrib) if(contrib[k]>preMax) preMax=contrib[k]; }
       if(S.k==='flop') potAtFlop=potStart;
-      out.streets[S.k]={potStart:potStart,acts:acts,potEnd:carried};
+      var afterFolds=liveStart.filter(function(p){return !folded[p];});
+      if(liveStart.length>1&&afterFolds.length<=1) ended=true;
+      out.streets[S.k]={
+        potStart:potStart, acts:acts, potEnd:carried, liveStart:liveStart, ended:ended,
+        avail:orderFor(S.k).filter(function(p){return liveStart.indexOf(p)>=0&&!folded[p];})
+      };
+      /* 進入下一條街的人：沒棄牌，而且把注跟平了（全下的人也算在內）。
+         這條街完全沒填行動就不推論，維持原本的人。 */
+      if(rows.length){
+        live=liveStart.filter(function(p){
+          if(folded[p]) return false;
+          if(lastAct[p]==='allin') return true;
+          return (contrib[p]||0)>=currentBet;
+        });
+      } else live=liveStart.slice();
     });
     var eff=Math.max(0,num(state.stack)-preMax);
     out.spr=(potAtFlop&&potAtFlop>0)?Math.round(eff/potAtFlop*10)/10:null;
@@ -300,13 +326,13 @@
     var hole=state.hole.map(function(c){return c?cardStr(c):'??';}).join(' ');
     L.push('Hero '+state.heroPos+' — '+hole);
     STREETS.forEach(function(S){
-      var acts=info.streets[S.k].acts, bs=boardStr(S);
+      var acts=info.streets[S.k].acts.filter(function(a){return !a.invalid;}), bs=boardStr(S);
       if(!acts.length&&!bs) return;
       var head=S.name.charAt(0)+S.name.slice(1).toLowerCase();
       var line=head+(bs?' '+bs:'')+' ('+fmt(info.streets[S.k].potStart)+'bb';
       if(S.k==='flop'&&info.spr!=null) line+=', SPR '+info.spr;
-      line+='): ';
-      line+=acts.map(function(a){return a.text+(a.meta?' ['+a.meta+']':'');}).join(', ');
+      line+=')';
+      if(acts.length) line+=': '+acts.map(function(a){return a.text+(a.meta?' ['+a.meta+']':'');}).join(', ');
       L.push(line);
     });
     var last=STREETS.slice().reverse().find(function(S){return (state.streets[S.k]||[]).length>0;});
@@ -393,6 +419,7 @@
 
   function renderStreets(){
     var host=$('#streets'); host.innerHTML='';
+    var info=analyze();
     STREETS.forEach(function(S){
       var sec=document.createElement('section'); sec.className='street'; sec.dataset.street=S.k;
       var gut=document.createElement('div');
@@ -411,25 +438,31 @@
       }
 
       var list=document.createElement('div'); list.className='acts';
-      (state.streets[S.k]||[]).forEach(function(a,ai){ list.appendChild(actRow(S,a,ai)); });
+      (state.streets[S.k]||[]).forEach(function(a,ai){ list.appendChild(actRow(S,a,ai,info)); });
       body.appendChild(list);
 
       var foot=document.createElement('div');
-      if(boardReady(S)){
+      var avail=info.streets[S.k].avail;
+      if(!boardReady(S)){
+        foot.innerHTML='<span class="hint">先補齊'+S.cn+'公牌</span>';
+      }else if(avail.length<=1){
+        foot.innerHTML='<span class="hint">'+(info.streets[S.k].ended
+          ? '手牌已結束（只剩 '+(avail[0]||'—')+'）'
+          : '只剩 '+(avail[0]||'—')+' 在牌局中——上一條街若還沒填完，補上跟注就會恢復')+'</span>';
+      }else{
         var add=document.createElement('button');
         add.className='btn tiny'; add.type='button'; add.textContent='+ 行動';
         add.addEventListener('click',function(){
-          var rows=state.streets[S.k], ord=orderFor(S.k), next=ord[0];
+          var rows=state.streets[S.k], ord=orderFor(S.k).filter(function(p){return avail.indexOf(p)>=0;});
+          var next=ord[0];
           if(rows.length){
             var li=ord.indexOf(rows[rows.length-1].actor);
-            next=ord[(li+1)%ord.length];
+            next=li<0?ord[0]:ord[(li+1)%ord.length];
           }
           rows.push({actor:next,act:rows.length?'call':(S.k==='preflop'?'raise':'check'),size:''});
           touch();
         });
         foot.appendChild(add);
-      }else{
-        foot.innerHTML='<span class="hint">先補齊'+S.cn+'公牌</span>';
       }
       body.appendChild(foot);
       sec.appendChild(body);
@@ -437,11 +470,16 @@
     });
   }
 
-  function actRow(S,a,ai){
+  function actRow(S,a,ai,info){
     var row=document.createElement('div'); row.className='act'; row.dataset.i=ai;
 
+    var d=info.streets[S.k];
+    var fb=(d.acts[ai]&&d.acts[ai].foldedBefore)||{};
+    var opts=orderFor(S.k).filter(function(p){return d.liveStart.indexOf(p)>=0&&!fb[p];});
+    if(opts.indexOf(a.actor)<0) opts.push(a.actor);
+
     var actor=document.createElement('select'); actor.className='actor';
-    orderFor(S.k).forEach(function(p){
+    opts.forEach(function(p){
       var o=document.createElement('option'); o.value=p;
       o.textContent=p+(p===state.heroPos?' · Hero':'');
       actor.appendChild(o);
@@ -509,7 +547,8 @@
       for(var i=0;i<rows.length;i++){
         var a=d.acts[i], m=rows[i].querySelector('[data-meta]');
         if(!a||!m) continue;
-        m.textContent=(a.meta?a.meta+' · ':'')+'池 '+fmt(a.potAfter)+'bb';
+        if(a.invalid){ m.textContent='⚠ 已不在牌局，這行不計入'; m.classList.add('warn'); }
+        else { m.textContent=(a.meta?a.meta+' · ':'')+'池 '+fmt(a.potAfter)+'bb'; m.classList.remove('warn'); }
       }
     });
     plain=buildNotation();
